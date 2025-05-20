@@ -135,3 +135,5 @@ cython_debug/
 
 # Windows files
 Thumbs.db
+
+assets/*

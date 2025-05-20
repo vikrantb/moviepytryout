@@ -1,7 +1,17 @@
 """
-Demo: generate a video of ~30 MoviePy‑v2 animations/transitions.
-Each segment shows one effect on the same image, lasts PER_CLIP_DURATION
-seconds, and has a text overlay naming the effect.
+Demo: generate a video showcasing ~30 MoviePy‑v2 animations & transitions.
+
+• Each segment lasts PER_CLIP_DURATION seconds and is labelled in‑frame.
+• Low FPS (slow‑motion feel) + background song that auto‑loops to fit.
+• Effects catalogue is easy to extend—just append to ANIMATIONS.
+
+Useful docs / references:
+- MoviePy effect reference: https://zulko.github.io/moviepy/index.html
+- FadeIn / FadeOut classes: https://zulko.github.io/moviepy/reference/moviepy.video.fx.FadeIn.html
+- SlideIn / SlideOut: https://zulko.github.io/moviepy/reference/moviepy.video.fx.SlideIn.html
+- Resize with a λ‑function (for smooth zoom): https://zulko.github.io/moviepy/reference/moviepy.video.fx.Resize.html
+- Freeze effect parameters: https://zulko.github.io/moviepy/reference/moviepy.video.fx.Freeze.html
+- New “complex” demos: continuous 360° spin, orbit‑zoom, and pulsating glow.
 """
 
 # ───────────────────────── Imports ──────────────────────────
@@ -15,6 +25,7 @@ from moviepy.video.compositing.CompositeVideoClip import (
 image_path  = "assets/pic.png"      # still image
 audio_path  = "assets/song.mp3"      # background music
 output_path = "assets/output.mp4"    # final video
+# (Swap these paths to try different inputs)
 
 # ───────────────────── Video parameters ─────────────────────
 FPS               = 8    # slow feel
@@ -49,7 +60,8 @@ ANIMATIONS = [
     ("Black & White",      lambda: build_effects(vfx.BlackAndWhite())),
     ("Invert Colors",      lambda: build_effects(vfx.InvertColors())),
     ("Increase Contrast",  lambda: build_effects(vfx.LumContrast(contrast=40))),
-    ("Gamma Brighten",     lambda: build_effects(vfx.GammaCorrection(gamma=1.5))),
+    # Composite: mirror horizontally then rotate a bit
+    ("Mirror X + Rotate 45°", lambda: build_effects(vfx.MirrorX(), vfx.Rotate(45))),
     ("Blink",              lambda: build_effects(vfx.Blink(0.2, 0.2))),
     ("Freeze Start",       lambda: build_effects(vfx.Freeze(t=0, freeze_duration=PER_CLIP_DURATION))),
     ("Freeze End",         lambda: build_effects(vfx.Freeze(
@@ -61,6 +73,26 @@ ANIMATIONS = [
     ("Accel‑Decel",        lambda: build_effects(vfx.AccelDecel())),
     ("Painting",           lambda: build_effects(vfx.Painting())),
     ("Scroll X",           lambda: build_effects(vfx.Scroll(0, 100))),
+    ("Gamma Boost (1.8)",    lambda: build_effects(vfx.GammaCorrection(gamma=1.8))),
+    ("Lum Contrast ↓",        lambda: build_effects(vfx.LumContrast(contrast=-40))),
+
+    # Continuous rotation over the whole clip (smooth spin)
+    ("Spin 360°", lambda: build_effects(
+        vfx.Rotate(lambda t: 360 * t / PER_CLIP_DURATION)
+    )),
+
+    # Orbit effect: simultaneous slow spin + slight zoom‑in
+    ("Orbit Zoom", lambda: build_effects(
+        vfx.Rotate(lambda t: 45 * t / PER_CLIP_DURATION),
+        vfx.Resize(lambda t: 1 + 0.15 * t)
+    )),
+
+    # Pulsating glow: margin halo + rapid gamma pulse
+    ("Pulsate Glow", lambda: build_effects(
+        vfx.Margin(40, color=(255, 255, 0)),
+        vfx.Blink(0.15, 0.15),  # Blink expects positional on/off times
+    )),
+
     ("Margin Glow",        lambda: build_effects(vfx.Margin(20, color=(255, 215, 0)))),
 ]
 
@@ -92,6 +124,10 @@ video = concatenate_videoclips(clips, method="compose")
 
 total_duration = len(clips) * PER_CLIP_DURATION
 audio_clip     = AudioFileClip(audio_path)
+
+# --- Audio ---
+# afx.AudioLoop repeats the song so it exactly matches total_duration
+# (handy for short background tracks).
 audio_looped   = audio_clip.with_effects([afx.AudioLoop(duration=total_duration)])
 video          = video.with_audio(audio_looped)
 
