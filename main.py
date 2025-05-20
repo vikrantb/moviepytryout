@@ -140,3 +140,145 @@ video.write_videofile(
     preset="medium",
     threads=4,
 )
+"""
+MoviePy demo – modular effect library + simple sequencing helpers
+=================================================================
+
+• All basic/advanced effects are exposed as *functions* that take only the
+  parameters you’ll most often tweak (duration, side, zoom factor, etc.).
+• Compose multiple effects with `seq()` – sugar for chaining.
+• Build a whole video by listing `(label, clip_fx)` tuples in `ANIMATIONS`.
+• Background audio is auto‑looped to fill the runtime.
+
+Docs worth bookmarking:
+- MoviePy API     : https://zulko.github.io/moviepy/index.html
+- Effect reference: https://zulko.github.io/moviepy/ref/videofx.html
+"""
+
+# ───────────────────────── Imports ──────────────────────────
+from typing import Callable, List
+
+from moviepy import ImageClip, TextClip, AudioFileClip, vfx, afx
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip, concatenate_videoclips
+
+# ───────────────────────── Paths ────────────────────────────
+image_path  = "assets/pic.png"   # ← swap to taste
+audio_path  = "assets/song.mp3"
+output_path = "assets/output.mp4"
+
+# ───────────────────── Video parameters ─────────────────────
+FPS               = 8
+PER_CLIP_DURATION = 2
+FONT              = "Arial"
+FONT_SIZE         = 50
+TEXT_COLOR        = "white"
+TEXT_BG           = "black"
+
+# ──────────────────── Effect primitives ─────────────────────
+def fade(d: float = 0.8):
+    """Cross‑fade in then out."""
+    return [vfx.FadeIn(d), vfx.FadeOut(d)]
+
+def slide_in(side: str = "left", d: float = 0.8):
+    return [vfx.SlideIn(d, side)]
+
+def slide_out(side: str = "left", d: float = 0.8):
+    return [vfx.SlideOut(d, side)]
+
+def rotate(deg: float = 90):
+    return [vfx.Rotate(deg)]
+
+def mirror(axis: str = "x"):
+    return [vfx.MirrorX()] if axis.lower() == "x" else [vfx.MirrorY()]
+
+def zoom(factor: float = 0.25, mode: str = "in"):
+    sign = 1 if mode == "in" else -1
+    return [vfx.Resize(lambda t: 1 + sign * factor * (t / PER_CLIP_DURATION))]
+
+def bw():           return [vfx.BlackAndWhite()]
+def invert():       return [vfx.InvertColors()]
+def contrast(delta=40): return [vfx.LumContrast(contrast=delta)]
+def gamma(val=1.5): return [vfx.GammaCorrection(gamma=val)]
+def margin(size=20, color=(255,215,0)): return [vfx.Margin(size, color=color)]
+def blink(on=0.2, off=0.2): return [vfx.Blink(on, off)]
+def freeze(at="end"): return [vfx.Freeze(t=at, freeze_duration=PER_CLIP_DURATION)]
+def time_mirror():   return [vfx.TimeMirror()]
+def time_sym():      return [vfx.TimeSymmetrize()]
+def supersample():   return [vfx.SuperSample(0.1, 6)]
+def accel_decel():   return [vfx.AccelDecel()]
+def painting():      return [vfx.Painting()]
+def scroll_x(px=100):return [vfx.Scroll(0, px)]
+
+# Complex combos
+def spin360():       return [vfx.Rotate(lambda t: 360 * t / PER_CLIP_DURATION)]
+def orbit_zoom():    return rotate(45) + zoom(0.15, "in")
+def pulsate_glow():  return margin(40, (255,255,0)) + blink(0.15,0.15)
+
+# ─────────────── Composition helpers ──────────────
+def seq(*effect_funcs: List[Callable[[], List[Callable]]]):
+    """Return a single list of effects executed in order."""
+    effects = []
+    for f in effect_funcs:
+        effects.extend(f())
+    return effects
+
+def make_clip(label: str, effects: List[Callable]):
+    """Create a CompositeVideoClip( base + overlay text )"""
+    base = (
+        ImageClip(image_path)
+        .with_duration(PER_CLIP_DURATION)
+        .with_fps(FPS)
+        .with_effects(effects)
+    )
+    txt = (
+        TextClip(label, fontsize=FONT_SIZE, color=TEXT_COLOR,
+                 bg_color=TEXT_BG, font=FONT, text_align="center")
+        .with_duration(PER_CLIP_DURATION)
+        .with_position(("center", "bottom"))
+    )
+    return CompositeVideoClip([base, txt])
+
+# ─────────────── Playlist of demo segments ───────────────
+ANIMATIONS = [
+    ("Fade In / Out",         seq(fade)),
+    ("Slide In‑Left",         seq(slide_in)),
+    ("Slide Out‑Right",       seq(slide_out)),
+    ("Rotate 180°",           seq(rotate)),
+    ("Mirror X",              seq(mirror)),
+    ("Zoom‑In",               seq(zoom)),
+    ("Black & White",         seq(bw)),
+    ("Invert Colors",         seq(invert)),
+    ("High Contrast",         seq(contrast)),
+    ("Gamma Boost",           seq(gamma)),
+    ("Blink",                 seq(blink)),
+    ("Freeze End",            seq(freeze)),
+    ("Time Mirror",           seq(time_mirror)),
+    ("SuperSample",           seq(supersample)),
+    ("Accel‑Decel",           seq(accel_decel)),
+    ("Painting",              seq(painting)),
+    ("Scroll X",              seq(scroll_x)),
+    # composites
+    ("Mirror + Rotate 45°",   seq(mirror, lambda: rotate(45))),
+    ("Spin 360°",             seq(spin360)),
+    ("Orbit Zoom",            seq(orbit_zoom)),
+    ("Pulsate Glow",          seq(pulsate_glow)),
+    ("Margin Glow",           seq(margin)),
+]
+
+# ─────────────── Build & render video ──────────────
+clips = [make_clip(label, fx) for label, fx in ANIMATIONS]
+video  = concatenate_videoclips(clips, method="compose")
+
+# Loop music
+audio_clip   = AudioFileClip(audio_path)
+audio_looped = audio_clip.with_effects([afx.AudioLoop(duration=len(clips)*PER_CLIP_DURATION)])
+video        = video.with_audio(audio_looped)
+
+video.write_videofile(
+    output_path,
+    fps=FPS,
+    codec="libx264",
+    audio_codec="aac",
+    preset="medium",
+    threads=4,
+)
